@@ -1,0 +1,14 @@
+services:
+  speedtest-tracker:
+    build: .
+    image: internet-monitor:latest
+    container_name: internet-monitor
+    restart: unless-stopped
+    ports:
+      - "6100:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATA_DIR=/data
