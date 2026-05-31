@@ -1,4 +1,4 @@
-# Internet Monitor — Self-Hosted Speed Test Tracker
+# Speed Watch — Self-Hosted Speed Test Tracker
 
 A lightweight, self-hosted speed test tracker that runs scheduled tests against either Ookla (via the official CLI) or Cloudflare (via direct HTTP requests), stores every result in SQLite, and shows the truth — especially failures — in a clean Svelte UI with Apache ECharts.
 
@@ -25,11 +25,11 @@ This section is for **using** the prebuilt image (or your own built image) to ru
 
 ```bash
 docker run -d \
-  --name internet-monitor \
+  --name speed-watch \
   --restart unless-stopped \
   -p 3000:3000 \
   -v $(pwd)/data:/data \
-  internet-monitor:latest
+  speed-watch:latest
 ```
 
 Then open <http://localhost:3000>.
@@ -112,7 +112,7 @@ This section is for **building** the Docker image from source, or developing loc
 ### Build the Docker image
 
 ```bash
-docker build -t internet-monitor:latest .
+docker build -t speed-watch:latest .
 ```
 
 The Dockerfile is multi-stage:

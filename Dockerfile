@@ -35,7 +35,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=6100
 ENV HOST=0.0.0.0
 ENV DATA_DIR=/data
 ENV DB_PATH=/data/speedtest.db
@@ -44,6 +44,6 @@ ENV CONFIG_PATH=/data/config.json
 RUN mkdir -p /data
 VOLUME ["/data"]
 
-EXPOSE 3000
+EXPOSE 6100
 
 CMD ["node", "build"]

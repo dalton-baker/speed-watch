@@ -1,14 +1,14 @@
 services:
-  speedtest-tracker:
+  speed-watch:
     build: .
-    image: internet-monitor:latest
-    container_name: internet-monitor
+    image: speed-watch:latest
+    container_name: speed-watch
     restart: unless-stopped
     ports:
-      - "6100:3000"
+      - "6100:6100"
     volumes:
       - ./data:/data
     environment:
-      - PORT=3000
+      - PORT=6100
       - HOST=0.0.0.0
       - DATA_DIR=/data

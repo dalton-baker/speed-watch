@@ -13,7 +13,7 @@
   <header>
     <div class="brand">
       <span class="logo">⚡</span>
-      <span>Speed Test Tracker</span>
+      <span>Speed Watch</span>
     </div>
     <nav>
       {#each links as link}
