@@ -27,12 +27,12 @@ This section is for **using** the prebuilt image (or your own built image) to ru
 docker run -d \
   --name speed-watch \
   --restart unless-stopped \
-  -p 3000:3000 \
+  -p 6100:6100 \
   -v $(pwd)/data:/data \
   speed-watch:latest
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:6100>.
 
 ### Quick start (docker compose)
 
@@ -43,7 +43,7 @@ docker compose up -d
 This uses the included `docker-compose.yml`, which:
 
 - Builds the image from this repo (or pulls if you change `image:` to a registry tag)
-- Maps port `3000` on the host to `3000` in the container
+- Maps port `6100` on the host to `6100` in the container
 - Mounts `./data` from the host into `/data` in the container
 
 ### Data volume
@@ -61,7 +61,7 @@ Environment variables are used **only** for bootstrap settings. All normal app s
 
 | Variable      | Default                  | Description                       |
 |---------------|--------------------------|-----------------------------------|
-| `PORT`        | `3000`                   | HTTP port to listen on            |
+| `PORT`        | `6100`                   | HTTP port to listen on            |
 | `HOST`        | `0.0.0.0`                | Bind address                      |
 | `DATA_DIR`    | `/data`                  | Directory for db + config         |
 | `DB_PATH`     | `/data/speedtest.db`     | Override DB path                  |
@@ -69,7 +69,7 @@ Environment variables are used **only** for bootstrap settings. All normal app s
 
 ### First-time configuration
 
-1. Open the app at `http://<host>:3000`
+1. Open the app at `http://<host>:6100`
 2. Go to **Config**
 3. Pick your active provider (Ookla or Cloudflare), set the cron schedule, and save
 
@@ -84,7 +84,7 @@ The scheduler reloads automatically after saving a valid config.
 
 ### Running behind a reverse proxy
 
-The container exposes plain HTTP on port `3000`. Place it behind your favourite reverse proxy (Caddy, Traefik, nginx, etc.) and add authentication there if needed.
+The container exposes plain HTTP on port `6100`. Place it behind your favourite reverse proxy (Caddy, Traefik, nginx, etc.) and add authentication there if needed.
 
 ### API
 
@@ -120,7 +120,7 @@ The Dockerfile is multi-stage:
 1. **Build stage** — installs npm dependencies (including native build deps for `better-sqlite3`) and runs `npm run build` to produce a production server bundle.
 2. **Runtime stage** — slim Node 20 image with the Ookla `speedtest` CLI installed from the official Ookla repository, plus the built bundle and pruned `node_modules`.
 
-The final image runs `node build` to start the SvelteKit server on `PORT` (default `3000`).
+The final image runs `node build` to start the SvelteKit server on `PORT` (default `6100`).
 
 ### Build with docker compose
 
@@ -144,7 +144,7 @@ npm install
 DATA_DIR=./data npm run dev
 ```
 
-The dev server runs on <http://localhost:3000>. The SQLite database and config are written to `./data/`.
+The dev server runs on <http://localhost:6100>. The SQLite database and config are written to `./data/`.
 
 To build and run a production bundle locally:
 
