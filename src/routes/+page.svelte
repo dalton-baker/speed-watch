@@ -163,16 +163,6 @@
     value={successRate == null ? '—' : `${successRate}%`}
     sub={`${successes}/${totalRuns} runs in range`}
   />
-  <SummaryCard
-    label="Failures in range"
-    value={failures}
-    sub={`${data.summary?.failures ?? 0} failed · ${data.summary?.timeouts ?? 0} timeout · ${data.summary?.partials ?? 0} partial · ${data.summary?.skipped ?? 0} skipped`}
-  />
-  <SummaryCard
-    label="Active provider"
-    value={data.config.activeProvider}
-    sub={data.config.scheduledTestsEnabled ? `cron: ${data.config.cron}` : 'scheduled tests disabled'}
-  />
 </section>
 
 <section class="charts">
