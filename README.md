@@ -47,10 +47,6 @@ services:
       - "6100:6100"
     volumes:
       - ./data:/data
-    environment:
-      - PORT=6100
-      - HOST=0.0.0.0
-      - DATA_DIR=/data
 ```
 
 Then run:
