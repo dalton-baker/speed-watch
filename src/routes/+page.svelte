@@ -1,6 +1,5 @@
 <script>
   import { onMount } from 'svelte';
-  import { invalidateAll } from '$app/navigation';
   import Chart from '$lib/components/Chart.svelte';
   import SummaryCard from '$lib/components/SummaryCard.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -22,12 +21,21 @@
   let summary = $state(null);
   let lastFailureAt = $state(null);
   let loading = $state(true);
+
   let selectedRange = $state(data.range);
+  let windowFrom = $state(null);
+  let windowTo = $state(null);
+  let isCustomWindow = $state(false);
+
+  function getRangeDurationMs() {
+    return TIME_RANGE_OPTIONS.find((o) => o.value === selectedRange)?.ms ?? 24 * 60 * 60 * 1000;
+  }
 
   async function fetchDashboardData() {
     loading = true;
     try {
-      const res = await fetch(`/api/dashboard?range=${selectedRange}`);
+      const params = new URLSearchParams({ from: String(windowFrom), to: String(windowTo) });
+      const res = await fetch(`/api/dashboard?${params}`);
       if (!res.ok) throw new Error('Failed to fetch dashboard data');
       const body = await res.json();
       runs = body.runs;
@@ -42,15 +50,55 @@
     }
   }
 
+  function setCurrentWindow() {
+    const ms = getRangeDurationMs();
+    windowTo = Date.now();
+    windowFrom = windowTo - ms;
+    isCustomWindow = false;
+  }
+
   function updateRange(value) {
     selectedRange = value;
     const url = new URL(window.location.href);
     url.searchParams.set('range', value);
     history.replaceState({}, '', url.pathname + url.search);
+    setCurrentWindow();
     fetchDashboardData();
   }
 
-  onMount(fetchDashboardData);
+  function goBack() {
+    const ms = getRangeDurationMs();
+    windowTo = windowFrom;
+    windowFrom = windowFrom - ms;
+    isCustomWindow = true;
+    fetchDashboardData();
+  }
+
+  function goForward() {
+    const ms = getRangeDurationMs();
+    const newTo = windowTo + ms;
+    const now = Date.now();
+    if (newTo >= now) {
+      windowTo = now;
+      windowFrom = now - ms;
+      isCustomWindow = false;
+    } else {
+      windowFrom = windowTo;
+      windowTo = newTo;
+      isCustomWindow = true;
+    }
+    fetchDashboardData();
+  }
+
+  function goCurrent() {
+    setCurrentWindow();
+    fetchDashboardData();
+  }
+
+  onMount(() => {
+    setCurrentWindow();
+    fetchDashboardData();
+  });
 
   async function runNow() {
     manualRunning = true;
@@ -72,41 +120,19 @@
     }
   }
 
+  const rangeMs = $derived(getRangeDurationMs());
+
   const downloadOption = $derived(
-    buildSeriesOption({
-      runs,
-      valueField: 'downloadMbps',
-      name: 'Download',
-      color: '#22d3ee',
-      unit: 'Mbps'
-    })
+    buildSeriesOption({ runs, valueField: 'downloadMbps', name: 'Download', color: '#22d3ee', unit: 'Mbps', rangeMs })
   );
   const uploadOption = $derived(
-    buildSeriesOption({
-      runs,
-      valueField: 'uploadMbps',
-      name: 'Upload',
-      color: '#a78bfa',
-      unit: 'Mbps'
-    })
+    buildSeriesOption({ runs, valueField: 'uploadMbps', name: 'Upload', color: '#a78bfa', unit: 'Mbps', rangeMs })
   );
   const pingOption = $derived(
-    buildSeriesOption({
-      runs,
-      valueField: 'pingMs',
-      name: 'Ping',
-      color: '#34d399',
-      unit: 'ms'
-    })
+    buildSeriesOption({ runs, valueField: 'pingMs', name: 'Ping', color: '#34d399', unit: 'ms', rangeMs })
   );
   const jitterOption = $derived(
-    buildSeriesOption({
-      runs,
-      valueField: 'jitterMs',
-      name: 'Jitter',
-      color: '#fbbf24',
-      unit: 'ms'
-    })
+    buildSeriesOption({ runs, valueField: 'jitterMs', name: 'Jitter', color: '#fbbf24', unit: 'ms', rangeMs })
   );
 
   const totalRuns = $derived(summary?.total ?? 0);
@@ -126,6 +152,11 @@
         <option value={opt.value}>{opt.label}</option>
       {/each}
     </select>
+    <div class="nav-buttons">
+      <button class="nav" onclick={goBack} disabled={loading} title="Previous period">‹</button>
+      <button class="nav" onclick={goForward} disabled={loading || !isCustomWindow} title="Next period">›</button>
+      <button class="nav current" onclick={goCurrent} disabled={loading || !isCustomWindow} title="Jump to current">Now</button>
+    </div>
     <button class="primary" onclick={runNow} disabled={manualRunning}>
       {manualRunning ? 'Running…' : 'Run Now'}
     </button>
@@ -292,7 +323,7 @@
     color: #f1f5f9;
   }
   .left { display: flex; gap: 0.8rem; align-items: baseline; }
-  .right { display: flex; gap: 0.6rem; align-items: center; }
+  .right { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
   .muted { color: #94a3b8; font-size: 0.85rem; }
   select {
     background: #0f172a;
@@ -300,6 +331,33 @@
     border: 1px solid #1e293b;
     border-radius: 6px;
     padding: 0.45rem 0.6rem;
+  }
+  .nav-buttons {
+    display: flex;
+    gap: 2px;
+  }
+  button.nav {
+    background: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 0.45rem 0.65rem;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  button.nav.current {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+    color: #22d3ee;
+    border-color: #164e63;
+  }
+  button.nav:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  button.nav:not(:disabled):hover {
+    background: #1e293b;
   }
   button.primary {
     background: #22d3ee;
