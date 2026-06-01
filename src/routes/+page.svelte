@@ -26,16 +26,25 @@
   let windowFrom = $state(null);
   let windowTo = $state(null);
   let isCustomWindow = $state(false);
+  let fetchController = null;
 
   function getRangeDurationMs() {
     return TIME_RANGE_OPTIONS.find((o) => o.value === selectedRange)?.ms ?? 24 * 60 * 60 * 1000;
   }
 
   async function fetchDashboardData() {
+    if (fetchController) fetchController.abort();
+    fetchController = new AbortController();
+    const controller = fetchController;
+
+    // Snapshot params synchronously; use server-side range for current windows to avoid clock skew
+    const params = isCustomWindow
+      ? new URLSearchParams({ from: String(windowFrom), to: String(windowTo) })
+      : new URLSearchParams({ range: selectedRange });
+
     loading = true;
     try {
-      const params = new URLSearchParams({ from: String(windowFrom), to: String(windowTo) });
-      const res = await fetch(`/api/dashboard?${params}`);
+      const res = await fetch(`/api/dashboard?${params}`, { signal: controller.signal });
       if (!res.ok) throw new Error('Failed to fetch dashboard data');
       const body = await res.json();
       runs = body.runs;
@@ -44,9 +53,9 @@
       summary = body.summary;
       lastFailureAt = body.lastFailureAt;
     } catch (e) {
-      console.error(e);
+      if (e.name !== 'AbortError') console.error(e);
     } finally {
-      loading = false;
+      if (fetchController === controller) loading = false;
     }
   }
 
