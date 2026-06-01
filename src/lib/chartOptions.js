@@ -13,7 +13,15 @@ function statusColor(status) {
   }
 }
 
-export function buildSeriesOption({ runs, valueField, name, color, unit }) {
+function axisLabelFormatter(value, rangeMs) {
+  const d = new Date(value);
+  if (rangeMs != null && rangeMs <= 24 * 60 * 60 * 1000) {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export function buildSeriesOption({ runs, valueField, name, color, unit, rangeMs }) {
   const data = runs.map((r) => {
     const v = r[valueField];
     if (r.status === 'success' && v != null && Number.isFinite(v)) {
@@ -49,7 +57,7 @@ export function buildSeriesOption({ runs, valueField, name, color, unit }) {
     xAxis: {
       type: 'time',
       axisLine: { lineStyle: { color: '#475569' } },
-      axisLabel: { color: '#94a3b8' },
+      axisLabel: { color: '#94a3b8', formatter: (v) => axisLabelFormatter(v, rangeMs) },
       splitLine: { show: false }
     },
     yAxis: {

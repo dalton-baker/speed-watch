@@ -1,7 +1,5 @@
 <script>
-  import { goto, invalidateAll } from '$app/navigation';
-  import { page } from '$app/state';
-  import { navigating } from '$app/stores';
+  import { onMount } from 'svelte';
   import Chart from '$lib/components/Chart.svelte';
   import SummaryCard from '$lib/components/SummaryCard.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -16,11 +14,100 @@
   let manualError = $state(null);
   let selectedRunId = $state(null);
 
-  function updateRange(value) {
-    const url = new URL(page.url);
-    url.searchParams.set('range', value);
-    goto(url.pathname + url.search, { replaceState: true, invalidateAll: true });
+  // Dashboard data loaded via API
+  let runs = $state([]);
+  let latest = $state(null);
+  let latestSuccess = $state(null);
+  let summary = $state(null);
+  let lastFailureAt = $state(null);
+  let loading = $state(true);
+
+  let selectedRange = $state(data.range);
+  let windowFrom = $state(null);
+  let windowTo = $state(null);
+  let isCustomWindow = $state(false);
+  let fetchController = null;
+
+  function getRangeDurationMs() {
+    return TIME_RANGE_OPTIONS.find((o) => o.value === selectedRange)?.ms ?? 24 * 60 * 60 * 1000;
   }
+
+  async function fetchDashboardData() {
+    if (fetchController) fetchController.abort();
+    fetchController = new AbortController();
+    const controller = fetchController;
+
+    // Snapshot params synchronously; use server-side range for current windows to avoid clock skew
+    const params = isCustomWindow
+      ? new URLSearchParams({ from: String(windowFrom), to: String(windowTo) })
+      : new URLSearchParams({ range: selectedRange });
+
+    loading = true;
+    try {
+      const res = await fetch(`/api/dashboard?${params}`, { signal: controller.signal });
+      if (!res.ok) throw new Error('Failed to fetch dashboard data');
+      const body = await res.json();
+      runs = body.runs;
+      latest = body.latest;
+      latestSuccess = body.latestSuccess;
+      summary = body.summary;
+      lastFailureAt = body.lastFailureAt;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+    } finally {
+      if (fetchController === controller) loading = false;
+    }
+  }
+
+  function setCurrentWindow() {
+    const ms = getRangeDurationMs();
+    windowTo = Date.now();
+    windowFrom = windowTo - ms;
+    isCustomWindow = false;
+  }
+
+  function updateRange(value) {
+    selectedRange = value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('range', value);
+    history.replaceState({}, '', url.pathname + url.search);
+    setCurrentWindow();
+    fetchDashboardData();
+  }
+
+  function goBack() {
+    const ms = getRangeDurationMs();
+    windowTo = windowFrom;
+    windowFrom = windowFrom - ms;
+    isCustomWindow = true;
+    fetchDashboardData();
+  }
+
+  function goForward() {
+    const ms = getRangeDurationMs();
+    const newTo = windowTo + ms;
+    const now = Date.now();
+    if (newTo >= now) {
+      windowTo = now;
+      windowFrom = now - ms;
+      isCustomWindow = false;
+    } else {
+      windowFrom = windowTo;
+      windowTo = newTo;
+      isCustomWindow = true;
+    }
+    fetchDashboardData();
+  }
+
+  function goCurrent() {
+    setCurrentWindow();
+    fetchDashboardData();
+  }
+
+  onMount(() => {
+    setCurrentWindow();
+    fetchDashboardData();
+  });
 
   async function runNow() {
     manualRunning = true;
@@ -38,50 +125,28 @@
       manualError = e.message;
     } finally {
       manualRunning = false;
-      invalidateAll();
+      fetchDashboardData();
     }
   }
 
+  const rangeMs = $derived(getRangeDurationMs());
+
   const downloadOption = $derived(
-    buildSeriesOption({
-      runs: data.runs,
-      valueField: 'downloadMbps',
-      name: 'Download',
-      color: '#22d3ee',
-      unit: 'Mbps'
-    })
+    buildSeriesOption({ runs, valueField: 'downloadMbps', name: 'Download', color: '#22d3ee', unit: 'Mbps', rangeMs })
   );
   const uploadOption = $derived(
-    buildSeriesOption({
-      runs: data.runs,
-      valueField: 'uploadMbps',
-      name: 'Upload',
-      color: '#a78bfa',
-      unit: 'Mbps'
-    })
+    buildSeriesOption({ runs, valueField: 'uploadMbps', name: 'Upload', color: '#a78bfa', unit: 'Mbps', rangeMs })
   );
   const pingOption = $derived(
-    buildSeriesOption({
-      runs: data.runs,
-      valueField: 'pingMs',
-      name: 'Ping',
-      color: '#34d399',
-      unit: 'ms'
-    })
+    buildSeriesOption({ runs, valueField: 'pingMs', name: 'Ping', color: '#34d399', unit: 'ms', rangeMs })
   );
   const jitterOption = $derived(
-    buildSeriesOption({
-      runs: data.runs,
-      valueField: 'jitterMs',
-      name: 'Jitter',
-      color: '#fbbf24',
-      unit: 'ms'
-    })
+    buildSeriesOption({ runs, valueField: 'jitterMs', name: 'Jitter', color: '#fbbf24', unit: 'ms', rangeMs })
   );
 
-  const totalRuns = $derived(data.summary?.total ?? 0);
-  const successes = $derived(data.summary?.successes ?? 0);
-  const failures = $derived((data.summary?.failures ?? 0) + (data.summary?.timeouts ?? 0) + (data.summary?.partials ?? 0) + (data.summary?.skipped ?? 0));
+  const totalRuns = $derived(summary?.total ?? 0);
+  const successes = $derived(summary?.successes ?? 0);
+  const failures = $derived((summary?.failures ?? 0) + (summary?.timeouts ?? 0) + (summary?.partials ?? 0) + (summary?.skipped ?? 0));
   const successRate = $derived(totalRuns > 0 ? Math.round((successes / totalRuns) * 1000) / 10 : null);
 </script>
 
@@ -91,20 +156,21 @@
     <span class="muted">Active provider: <strong>{data.config.activeProvider}</strong></span>
   </div>
   <div class="right">
-    <select id="range" value={data.range} onchange={(e) => updateRange(e.target.value)}>
+    <select id="range" value={selectedRange} onchange={(e) => updateRange(e.target.value)}>
       {#each TIME_RANGE_OPTIONS as opt}
         <option value={opt.value}>{opt.label}</option>
       {/each}
     </select>
+    <div class="nav-buttons">
+      <button class="nav" onclick={goBack} disabled={loading} title="Previous period">‹</button>
+      <button class="nav" onclick={goForward} disabled={loading || !isCustomWindow} title="Next period">›</button>
+      <button class="nav current" onclick={goCurrent} disabled={loading || !isCustomWindow} title="Jump to current">Now</button>
+    </div>
     <button class="primary" onclick={runNow} disabled={manualRunning}>
       {manualRunning ? 'Running…' : 'Run Now'}
     </button>
   </div>
 </div>
-
-{#if $navigating}
-  <div class="loading-bar">Loading…</div>
-{/if}
 
 {#if manualError}
   <div class="alert error">
@@ -136,31 +202,31 @@
 <section class="cards">
   <SummaryCard
     label="Latest download"
-    value={formatNumber(data.latestSuccess?.downloadMbps)}
+    value={formatNumber(latestSuccess?.downloadMbps)}
     unit="Mbps"
-    sub={data.latestSuccess ? formatRelative(data.latestSuccess.startedAt) : 'no successful runs'}
+    sub={latestSuccess ? formatRelative(latestSuccess.startedAt) : 'no successful runs'}
   />
   <SummaryCard
     label="Latest upload"
-    value={formatNumber(data.latestSuccess?.uploadMbps)}
+    value={formatNumber(latestSuccess?.uploadMbps)}
     unit="Mbps"
-    sub={data.latestSuccess ? formatRelative(data.latestSuccess.startedAt) : 'no successful runs'}
+    sub={latestSuccess ? formatRelative(latestSuccess.startedAt) : 'no successful runs'}
   />
   <SummaryCard
     label="Latest ping"
-    value={formatNumber(data.latestSuccess?.pingMs)}
+    value={formatNumber(latestSuccess?.pingMs)}
     unit="ms"
-    sub={data.latestSuccess ? `jitter ${formatNumber(data.latestSuccess.jitterMs)} ms` : '—'}
+    sub={latestSuccess ? `jitter ${formatNumber(latestSuccess.jitterMs)} ms` : '—'}
   />
   <SummaryCard
     label="Last run"
-    value={data.latest ? data.latest.status : '—'}
-    sub={data.latest ? formatRelative(data.latest.startedAt) : 'no runs yet'}
+    value={latest ? latest.status : '—'}
+    sub={latest ? formatRelative(latest.startedAt) : 'no runs yet'}
   />
   <SummaryCard
     label="Last failure"
-    value={data.lastFailureAt ? formatRelative(data.lastFailureAt) : 'none'}
-    sub={data.lastFailureAt ? formatLocalDateTime(data.lastFailureAt) : '—'}
+    value={lastFailureAt ? formatRelative(lastFailureAt) : 'none'}
+    sub={lastFailureAt ? formatLocalDateTime(lastFailureAt) : '—'}
   />
   <SummaryCard
     label="Success rate"
@@ -172,19 +238,35 @@
 <section class="charts">
   <div class="chart-card">
     <h3>Download (Mbps)</h3>
-    <Chart option={downloadOption} />
+    {#if loading}
+      <div class="chart-loading"><div class="spinner"></div></div>
+    {:else}
+      <Chart option={downloadOption} />
+    {/if}
   </div>
   <div class="chart-card">
     <h3>Upload (Mbps)</h3>
-    <Chart option={uploadOption} />
+    {#if loading}
+      <div class="chart-loading"><div class="spinner"></div></div>
+    {:else}
+      <Chart option={uploadOption} />
+    {/if}
   </div>
   <div class="chart-card">
     <h3>Ping (ms)</h3>
-    <Chart option={pingOption} />
+    {#if loading}
+      <div class="chart-loading"><div class="spinner"></div></div>
+    {:else}
+      <Chart option={pingOption} />
+    {/if}
   </div>
   <div class="chart-card">
     <h3>Jitter (ms)</h3>
-    <Chart option={jitterOption} />
+    {#if loading}
+      <div class="chart-loading"><div class="spinner"></div></div>
+    {:else}
+      <Chart option={jitterOption} />
+    {/if}
   </div>
 </section>
 
@@ -208,20 +290,24 @@
         </tr>
       </thead>
       <tbody>
-        {#each [...data.runs].reverse().slice(0, 12) as run}
-          <tr>
-            <td>{formatLocalDateTime(run.startedAt)}</td>
-            <td><StatusBadge status={run.status} /></td>
-            <td>{run.provider}</td>
-            <td>{formatNumber(run.downloadMbps)}</td>
-            <td>{formatNumber(run.uploadMbps)}</td>
-            <td>{formatNumber(run.pingMs)}</td>
-            <td class="err">{run.errorCode ? `${run.errorCode}: ${run.errorMessage ?? ''}` : '—'}</td>
-            <td><button class="link" onclick={() => (selectedRunId = run.id)}>Details</button></td>
-          </tr>
+        {#if loading}
+          <tr><td colspan="8" class="muted loading-cell"><div class="spinner spinner-sm"></div> Loading…</td></tr>
         {:else}
-          <tr><td colspan="8" class="muted">No runs in selected range.</td></tr>
-        {/each}
+          {#each [...runs].reverse().slice(0, 12) as run}
+            <tr>
+              <td>{formatLocalDateTime(run.startedAt)}</td>
+              <td><StatusBadge status={run.status} /></td>
+              <td>{run.provider}</td>
+              <td>{formatNumber(run.downloadMbps)}</td>
+              <td>{formatNumber(run.uploadMbps)}</td>
+              <td>{formatNumber(run.pingMs)}</td>
+              <td class="err">{run.errorCode ? `${run.errorCode}: ${run.errorMessage ?? ''}` : '—'}</td>
+              <td><button class="link" onclick={() => (selectedRunId = run.id)}>Details</button></td>
+            </tr>
+          {:else}
+            <tr><td colspan="8" class="muted">No runs in selected range.</td></tr>
+          {/each}
+        {/if}
       </tbody>
     </table>
   </div>
@@ -246,7 +332,7 @@
     color: #f1f5f9;
   }
   .left { display: flex; gap: 0.8rem; align-items: baseline; }
-  .right { display: flex; gap: 0.6rem; align-items: center; }
+  .right { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
   .muted { color: #94a3b8; font-size: 0.85rem; }
   select {
     background: #0f172a;
@@ -254,6 +340,33 @@
     border: 1px solid #1e293b;
     border-radius: 6px;
     padding: 0.45rem 0.6rem;
+  }
+  .nav-buttons {
+    display: flex;
+    gap: 2px;
+  }
+  button.nav {
+    background: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 0.45rem 0.65rem;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  button.nav.current {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+    color: #22d3ee;
+    border-color: #164e63;
+  }
+  button.nav:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  button.nav:not(:disabled):hover {
+    background: #1e293b;
   }
   button.primary {
     background: #22d3ee;
@@ -332,6 +445,34 @@
     font-size: 0.95rem;
     color: #cbd5e1;
   }
+  .chart-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 280px;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #1e293b;
+    border-top-color: #22d3ee;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  .spinner-sm {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+  }
+  .loading-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
   .recent { margin-top: 1rem; }
   .recent-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem; }
   .recent-header h3 { margin: 0; color: #f1f5f9; }
@@ -350,14 +491,4 @@
   th, td { padding: 0.55rem 0.8rem; text-align: left; border-bottom: 1px solid #1e293b; }
   th { color: #94a3b8; font-weight: 500; background: #0a1426; }
   td.err { color: #fca5a5; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .loading-bar {
-    text-align: center;
-    padding: 0.6rem;
-    margin-bottom: 1rem;
-    background: rgba(34, 211, 238, 0.08);
-    border: 1px solid #164e63;
-    border-radius: 6px;
-    color: #22d3ee;
-    font-size: 0.85rem;
-  }
 </style>
