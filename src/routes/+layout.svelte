@@ -1,5 +1,6 @@
 <script>
   import { page } from '$app/state';
+  import logoSvg from '$lib/assets/favicon.svg';
   let { children } = $props();
 
   const links = [
@@ -12,7 +13,7 @@
 <div class="app">
   <header>
     <div class="brand">
-      <span class="logo">⚡</span>
+      <img class="logo" src={logoSvg} alt="Speed Watch logo" />
       <span>Speed Watch</span>
     </div>
     <nav>
@@ -74,8 +75,8 @@
     color: #f1f5f9;
   }
   .logo {
-    color: #22d3ee;
-    font-size: 1.3rem;
+    width: 1.5rem;
+    height: 1.5rem;
   }
   nav {
     display: flex;

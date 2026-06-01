@@ -1,6 +1,7 @@
 <script>
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
+  import { navigating } from '$app/stores';
   import Chart from '$lib/components/Chart.svelte';
   import SummaryCard from '$lib/components/SummaryCard.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -18,7 +19,7 @@
   function updateRange(value) {
     const url = new URL(page.url);
     url.searchParams.set('range', value);
-    goto(url.pathname + url.search, { invalidateAll: true });
+    goto(url.pathname + url.search, { replaceState: true, invalidateAll: true });
   }
 
   async function runNow() {
@@ -90,7 +91,6 @@
     <span class="muted">Active provider: <strong>{data.config.activeProvider}</strong></span>
   </div>
   <div class="right">
-    <label for="range" class="muted">Range</label>
     <select id="range" value={data.range} onchange={(e) => updateRange(e.target.value)}>
       {#each TIME_RANGE_OPTIONS as opt}
         <option value={opt.value}>{opt.label}</option>
@@ -101,6 +101,10 @@
     </button>
   </div>
 </div>
+
+{#if $navigating}
+  <div class="loading-bar">Loading…</div>
+{/if}
 
 {#if manualError}
   <div class="alert error">
@@ -313,7 +317,7 @@
   }
   .charts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.8rem;
     margin-bottom: 1.4rem;
   }
@@ -346,4 +350,14 @@
   th, td { padding: 0.55rem 0.8rem; text-align: left; border-bottom: 1px solid #1e293b; }
   th { color: #94a3b8; font-weight: 500; background: #0a1426; }
   td.err { color: #fca5a5; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loading-bar {
+    text-align: center;
+    padding: 0.6rem;
+    margin-bottom: 1rem;
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid #164e63;
+    border-radius: 6px;
+    color: #22d3ee;
+    font-size: 0.85rem;
+  }
 </style>
