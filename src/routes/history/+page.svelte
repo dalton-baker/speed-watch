@@ -3,33 +3,31 @@
   import { page } from '$app/state';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import ResultDetails from '$lib/components/ResultDetails.svelte';
-  import { TIME_RANGE_OPTIONS, formatLocalDateTime, formatNumber } from '$lib/timeRange.js';
+  import { formatLocalDateTime, formatNumber } from '$lib/timeRange.js';
 
   let { data } = $props();
 
   let selectedRunId = $state(null);
-  let statusFilter = $state('all');
 
   function updateParam(name, value) {
     const url = new URL(page.url);
-    if (value) url.searchParams.set(name, value);
+    if (value && value !== 'all' && value !== '') url.searchParams.set(name, value);
     else url.searchParams.delete(name);
+    url.searchParams.delete('page');
     goto(url.pathname + url.search, { invalidateAll: true });
   }
 
-  const filtered = $derived(
-    statusFilter === 'all' ? [...data.runs].reverse() : data.runs.filter((r) => r.status === statusFilter).reverse()
-  );
+  function goToPage(p) {
+    const url = new URL(page.url);
+    if (p > 1) url.searchParams.set('page', String(p));
+    else url.searchParams.delete('page');
+    goto(url.pathname + url.search, { invalidateAll: true });
+  }
 </script>
 
 <div class="topbar">
   <h1>History</h1>
   <div class="filters">
-    <label>Range
-      <select value={data.range} onchange={(e) => updateParam('range', e.target.value)}>
-        {#each TIME_RANGE_OPTIONS as opt}<option value={opt.value}>{opt.label}</option>{/each}
-      </select>
-    </label>
     <label>Provider
       <select value={data.provider} onchange={(e) => updateParam('provider', e.target.value)}>
         <option value="">All</option>
@@ -38,7 +36,7 @@
       </select>
     </label>
     <label>Status
-      <select bind:value={statusFilter}>
+      <select value={data.status} onchange={(e) => updateParam('status', e.target.value)}>
         <option value="all">All</option>
         <option value="success">Success</option>
         <option value="failed">Failed</option>
@@ -50,7 +48,7 @@
   </div>
 </div>
 
-<p class="muted">Showing {filtered.length} runs</p>
+<p class="muted">Showing page {data.page} of {data.totalPages} ({data.total} runs total)</p>
 
 <div class="table-wrap">
   <table>
@@ -69,7 +67,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each filtered as run}
+      {#each data.runs as run}
         <tr>
           <td>{run.id}</td>
           <td>{formatLocalDateTime(run.startedAt)}</td>
@@ -89,6 +87,14 @@
   </table>
 </div>
 
+{#if data.totalPages > 1}
+  <div class="pagination">
+    <button disabled={data.page <= 1} onclick={() => goToPage(data.page - 1)}>← Previous</button>
+    <span class="muted">Page {data.page} of {data.totalPages}</span>
+    <button disabled={data.page >= data.totalPages} onclick={() => goToPage(data.page + 1)}>Next →</button>
+  </div>
+{/if}
+
 {#if selectedRunId}
   <ResultDetails runId={selectedRunId} onClose={() => (selectedRunId = null)} />
 {/if}
@@ -106,4 +112,24 @@
   th { color: #94a3b8; font-weight: 500; background: #0a1426; }
   td.err { color: #fca5a5; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.link { background: none; border: none; color: #22d3ee; text-decoration: underline; padding: 0; font-size: 0.85rem; cursor: pointer; }
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .pagination button {
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 </style>

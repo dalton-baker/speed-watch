@@ -121,6 +121,31 @@ export function getRuns({ from, to, provider, limit } = {}) {
   return rows.map(rowToRun);
 }
 
+export function getRunsPaginated({ page = 1, limit = 50, provider, status } = {}) {
+  const db = getDb();
+  const where = [`trigger = 'scheduled'`];
+  const params = [];
+  if (provider) {
+    where.push('provider = ?');
+    params.push(provider);
+  }
+  if (status && status !== 'all') {
+    if (status === 'failed') {
+      where.push("status IN ('failed', 'error')");
+    } else {
+      where.push('status = ?');
+      params.push(status);
+    }
+  }
+  const whereClause = where.join(' AND ');
+  const countSql = `SELECT COUNT(*) as total FROM runs WHERE ${whereClause}`;
+  const total = db.prepare(countSql).get(...params).total;
+  const offset = (page - 1) * limit;
+  const dataSql = `SELECT * FROM runs WHERE ${whereClause} ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?`;
+  const rows = db.prepare(dataSql).all(...params, limit, offset);
+  return { runs: rows.map(rowToRun), total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
 export function getSummary({ from, to } = {}) {
   const db = getDb();
   const where = [`trigger = 'scheduled'`];
