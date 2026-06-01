@@ -13,15 +13,18 @@ function statusColor(status) {
   }
 }
 
-function axisLabelFormatter(value, rangeMs) {
-  const d = new Date(value);
-  if (rangeMs != null && rangeMs <= 24 * 60 * 60 * 1000) {
-    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
-  }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+const TIME_AXIS_FORMATTER = {
+  year: '{yyyy}',
+  month: '{MMM} {yyyy}',
+  day: '{MMM} {d}',
+  hour: '{MMM} {d}\n{HH}:{mm}',
+  minute: '{MMM} {d}\n{HH}:{mm}',
+  second: '{HH}:{mm}:{ss}',
+  millisecond: '{HH}:{mm}:{ss}',
+  none: '{yyyy}-{MM}-{dd} {HH}:{mm}'
+};
 
-export function buildSeriesOption({ runs, valueField, name, color, unit, rangeMs }) {
+export function buildSeriesOption({ runs, valueField, name, color, unit }) {
   const data = runs.map((r) => {
     const v = r[valueField];
     if (r.status === 'success' && v != null && Number.isFinite(v)) {
@@ -57,7 +60,7 @@ export function buildSeriesOption({ runs, valueField, name, color, unit, rangeMs
     xAxis: {
       type: 'time',
       axisLine: { lineStyle: { color: '#475569' } },
-      axisLabel: { color: '#94a3b8', formatter: (v) => axisLabelFormatter(v, rangeMs) },
+      axisLabel: { color: '#94a3b8', formatter: TIME_AXIS_FORMATTER },
       splitLine: { show: false }
     },
     yAxis: {
