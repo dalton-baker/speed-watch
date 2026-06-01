@@ -14,14 +14,8 @@ function statusColor(status) {
 }
 
 const TIME_AXIS_FORMATTER = {
-  year: '{yyyy}',
-  month: '{MMM} {yyyy}',
-  day: '{MMM} {d}',
-  hour: '{MMM} {d}\n{HH}:{mm}',
-  minute: '{MMM} {d}\n{HH}:{mm}',
-  second: '{HH}:{mm}:{ss}',
-  millisecond: '{HH}:{mm}:{ss}',
-  none: '{yyyy}-{MM}-{dd} {HH}:{mm}'
+  hour: '{h}:{mm}{a}',
+  minute: '{h}:{mm}{a}'
 };
 
 export function buildSeriesOption({ runs, valueField, name, color, unit }) {
